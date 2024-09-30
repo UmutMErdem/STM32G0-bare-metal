@@ -1,0 +1,12 @@
+../Drivers/CMSIS/Include/core_cm0plus.h:741:22:__NVIC_EnableIRQ	2
+../Drivers/CMSIS/Include/core_cm0plus.h:850:22:__NVIC_SetPriority	2
+../Core/Src/main.c:14:5:main	1
+../Core/Src/main.c:26:6:EXTI0_1_IRQHandler	1
+../Core/Src/main.c:31:6:clearSSD	1
+../Core/Src/main.c:41:6:setSSD	11
+../Core/Src/main.c:76:6:counter	2
+../Core/Src/main.c:125:6:ButtonInit	1
+../Core/Src/main.c:137:6:GPIOA_Init	1
+../Core/Src/main.c:145:6:GPIOB_Init	1
+../Core/Src/main.c:153:6:SetZero	1
+../Core/Src/main.c:161:6:delay	2

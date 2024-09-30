@@ -1,0 +1,43 @@
+#include "stm32g0xx.h"
+
+void IWDGFunction(void){
+	/*IWDG status register
+	 * WVU: Watchdog counter window value update
+	 * RVU: Watchdog counter reload value update
+	 * PVU: Watchdog prescaler value update
+	 */
+	IWDG->SR = 0x7;
+}
+
+int main(void) {
+
+	/* PC6 output set
+	 * turned on the LED before initializing the watchdog.
+	 * This will provide a blinking effect, if the system resets and the execution starts from the beginning.
+	*/
+	RCC->IOPENR = RCC_IOPENR_GPIOCEN;
+	GPIOC->MODER &= ~(3U << 2*6);
+	GPIOC->MODER |= (1U << 2*6);
+	GPIOC->ODR |= (1U << 6);
+
+	/* IWDG->KR : the key value 0x5555 to enable access to the IWDG_PR, IWDG_RLR and IWDG_WINR registers
+	 * Writing the key value 0xCCCC starts the watchdog
+	 * IWDG->PR : Prescaler divider are written by software to select the prescaler divider feeding the counter clock.
+	 * IWDG->RLR : They are written by software to define the value to be loaded in the watchdog counter each time the value
+		0xAAAA is written in the IWDG key register (IWDG_KR). The watchdog counter counts down from this value.
+		The timeout period is a function of this value and the clock prescaler.
+		IWDG->WINR : they contain the high limit of the window value to be compared with the downcounter.
+	 */
+	RCC->IOPENR = RCC_CSR_IWDGRSTF;
+	IWDG->KR = 0x5555; // IWDG key register
+	IWDG->PR = 0x5; // IWDG prescaler register - 32 devider
+	IWDG->RLR = 0xFFF; // IWDG reload register - Watchdog counter reload value - 4095
+	IWDG->WINR = 0xFFF; // IWDG window register - Watchdog counter window value - 4095
+	IWDG->KR = 0xCCCC;
+
+	while(1) {
+		IWDGFunction();
+	}
+
+	return 0;
+}

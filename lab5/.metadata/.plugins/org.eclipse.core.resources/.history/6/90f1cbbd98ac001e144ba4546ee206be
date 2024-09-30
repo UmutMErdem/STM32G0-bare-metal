@@ -1,0 +1,296 @@
+/* author: Umut Mehmet ERDEM | Arda DERİCİ | Serdar BAŞYEMENİCİ
+* problem2.c
+*/
+
+#include "stdlib.h"
+#include "stm32g0xx.h"
+
+uint16_t mic_val; // microphone data
+uint16_t counter = 0;
+
+uint16_t ADC_Data(void);
+void System_Config(void);
+void GPIO_Config(void);
+void TIM3_Config(void);
+void USART1_Config(void);
+void ADC_Config(void);
+void counterDisplay(uint16_t);
+void printInt(uint16_t);
+void clearSSD(void);
+void setSSD(int);
+void SetZero(void);
+void print(char *);
+int _print(int, char *, int);
+void printChar(uint8_t);
+void Delay(volatile uint32_t);
+
+void TIM3_IRQHandler(void){
+	mic_val = ADC_Data();
+
+	if((GPIOA->IDR >>4) & 1){ // if button is pressed
+		counter = 0;
+		Delay(32000);
+	}
+	if(mic_val > 95){
+		counter++;
+		Delay(320000);
+	}
+	counterDisplay(counter);
+	Delay(2000);
+
+	TIM3->SR &=  ~(TIM_SR_CC1IF); // Clear capture compare interrupt 1 flag
+	TIM3->SR &= ~(TIM_SR_UIF); // Clear update status register
+}
+
+int main(void){
+	System_Config();
+	while(1){
+		printInt(mic_val); // transmit of microphone data for real time graph
+	}
+	return 0;
+}
+
+void System_Config(void){// all initialize are this function
+	SetZero(); // leds show us 0000 value.
+	GPIO_Config();
+	TIM3_Config();
+	USART1_Config();
+	ADC_Config();
+}
+
+void counterDisplay(uint16_t counterVal){
+	int thousand, hundred, decimal, unit;
+	thousand=(counterVal/1000); // thousand digit of counter
+	hundred=((counterVal-thousand*1000)/100); // hundred digit of counter
+	decimal=((counterVal- thousand*1000 - hundred*100)/10); // decimal digit of counter
+	unit=(counterVal- thousand*1000 - hundred*100 - decimal*10); // unit digit of counter
+
+	/* unit digit we want is set to 1 and the others are set to 0*/
+	GPIOA ->ODR &= ~(1U << 7); // off D1 - PA7
+	GPIOA ->ODR &= ~(1U << 6); // off D2 - PA6
+	GPIOA ->ODR &= ~(1U << 0); // off D3 - PA0
+	GPIOA ->ODR |= (1U << 5); // on D4 - PA5
+	setSSD(unit);
+	Delay(100);
+
+	/* decimal digit we want is set to 1 and the others are set to 0*/
+	GPIOA ->ODR &= ~(1U << 7); // D1 - PA7
+	GPIOA ->ODR &= ~(1U << 6); // D2 - PA7
+	GPIOA ->ODR |= (1U << 0); // D3 - PA7
+	GPIOA ->ODR &= ~(1U << 5);
+	setSSD(decimal);
+	Delay(100);
+
+	/* hundred digit we want is set to 1 and the others are set to 0*/
+	GPIOA ->ODR &= ~(1U << 7); // D1 - PA7
+	GPIOA ->ODR |= (1U << 6); // D2 - PA7
+	GPIOA ->ODR &= ~(1U << 0); // D3 - PA7
+	GPIOA ->ODR &= ~(1U << 5);
+	setSSD(hundred);
+	Delay(100);
+
+	/* thousand digit we want is set to 1 and the others are set to 0*/
+	GPIOA ->ODR |= (1U << 7); // D1 - PA7
+	GPIOA ->ODR &= ~(1U << 6); // D2 - PA7
+	GPIOA ->ODR &= ~(1U << 0); // D3 - PA7
+	GPIOA ->ODR &= ~(1U << 5);
+	setSSD(thousand);
+	Delay(300);
+}
+
+uint16_t ADC_Data(void){
+	ADC1->CR |= ADC_CR_ADSTART; // ADC Start Conversion
+
+	/*This bit is set by hardware at the end of each conversion(EOC) of a channel
+	 * when a new data result is available in the ADC_DR register.
+	 * 0: Channel conversion not complete
+	 * 1: Channel conversion complete*/
+	if((ADC1->ISR>>2) & (ADC_ISR_EOC>>2)){
+		return ADC1->DR; // return ADC data value
+	}
+	return 0;
+}
+
+void printInt(uint16_t intVal){
+	char buffer[5];
+	snprintf(buffer, 5, "%d\n", intVal);
+	print(buffer);
+}
+void print(char *s){
+	int length = 0; // to count length of character
+	/* i is pointer of string and length is increasing until i equals NULL character*/
+	for(char *i = s; *i != NULL; i++) length++;
+	_print(0, s, length);
+}
+
+int _print(int f, char *ptr, int len){
+	/*in for loop, i of is increasing until equal to len
+	 * and meanwhile, chars of 2nd parameter of _print function is writen
+	 * into the printChar character by character increasing ptr of 2nd parameter
+	 * of _print function  */
+	for(volatile int i = f; i<len; i++){
+		printChar(*ptr);
+		ptr++;
+	}
+	return len; // return length
+}
+
+void printChar(uint8_t c){
+	while(!(USART1->ISR & USART_ISR_TXE_TXFNF)); // when messages are sent.
+	USART1->TDR = c; // Transmit data register is taken character to send a message.
+}
+
+void GPIO_Config(void){
+	// input-output A and B ports clock enable
+	RCC->IOPENR |= (RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN);
+
+	// PA4 is set as input for button
+	GPIOA->MODER &= ~(3U << 2*4);
+
+	//PA1 is ADC for microphone
+	GPIOA->MODER |= (3 << 2*1);
+
+	/* modes of GPIOA PA9 and PA10 pins are selected as alternate function.
+	 * like that 0b1111_1010_1111;*/
+	GPIOA->MODER &= ~((3U << 2*9) | (3U << 2*10));
+	GPIOA->MODER |= (2U << 2*9) | (2U << 2*10);
+
+	/* PA9 and PA10 pins used for USART1_TX and USART1_RX are selected
+	 * with GPIOx_AFRH = AFRH_AFSELy(Alternate Function register -
+	 * Alternate function selection for port x pin y)
+	 * AF1 -->> USART1_RX, USART1_TX*/
+	GPIOA->AFR[1] |= GPIO_AFRH_AFSEL9_0;
+	GPIOA->AFR[1] |= GPIO_AFRH_AFSEL10_0;
+
+	/* enable required GPIOA registers and RCC register */
+	/*PA7 -> D1 digit, PA6 -> D2 digit, PA0 -> D3 digit, PA5 -> D4 digit,*/
+	RCC->IOPENR |= (1U << 0);
+	for(int k=0; k<9; k++){
+		if (k==0 || k==1 || k==5 || k==6 || k==7 || k==8){
+			GPIOA->MODER &= ~(3U << 2*k);
+			GPIOA->MODER |= (1U << 2*k);
+		}
+	}
+
+	/* enable required GPIOB registers and RCC register */
+	/*PB0-PB6 output pins are assigned from A to G respectively*/
+	RCC->IOPENR |= (1U << 1);
+	for(int k=0; k<9; k++){
+		if (k==0 || k==1 || k==2 || k==3 || k==4 || k==5 || k==6 || k==8){
+			GPIOB->MODER &= ~(3U << 2*k);
+			GPIOB->MODER |= (1U << 2*k);
+		}
+	}
+}
+
+void ADC_Config(void){
+	RCC->APBENR2 |= RCC_APBENR2_ADCEN; // ADC clock enable
+
+	ADC1->CR |=ADC_CR_ADVREGEN; //voltage regulator enable
+	Delay(500);
+
+	ADC1->CR |=ADC_CR_ADCAL; //calibration
+	while(((ADC1->CR>>31)==ADC_CR_ADCAL>>31)); // until calibration
+	/* 0: Calibration complete
+	 * 1: Write 1 to calibrate the ADC. Read at 1 means that a calibration is in progress.*/
+
+	ADC1->CR |= ADC_CR_ADEN; // ADC is enabled.
+	while (ADC1->ISR & ADC_ISR_ADRDY); // 1: ADC is ready to start conversion
+
+	ADC1->CHSELR |= ADC_CHSELR_CHSEL1; //chanel selection for PA1
+	ADC1->CFGR1 |= ADC_CFGR1_CONT; // contionous conversion
+
+	ADC1->SMPR |= (6UL<<0); // 79.5 ADC clock cycles for sampling time selection 1
+}
+
+void TIM3_Config(void){
+	RCC->APBENR1 |=	RCC_APBENR1_TIM3EN; // Timer 3 clock enable
+
+	TIM3->CR1=0; // zero out the control register just in case
+	TIM3->CR1 |= TIM_CR1_ARPE; // Auto-reload preload enable
+
+	TIM3->CNT =0; // zero out counter
+
+	// tim uptade frequency = TIM_CLK/((TIM_PSC+1)*TIM_ARR) for 1s interrupt
+	TIM3->PSC= 0;
+	TIM3->ARR= 16000;
+
+	TIM3->DIER |= TIM_DIER_UIE; // Update interrupt enable
+
+	TIM3->CR1 |= TIM_CR1_CEN; // TIM3 Counter enable
+
+	NVIC_SetPriority(TIM3_IRQn, 1);
+	NVIC_EnableIRQ(TIM3_IRQn);
+}
+
+void USART1_Config(void){
+	RCC->APBENR2 |= RCC_APBENR2_USART1EN; // RCC APB peripherals clock enable for USART2
+	USART1->CR1 = 0x00; // clear all
+	USART1->CR1 |= USART_CR1_UE; // UE: USART enable
+
+	/* Baud rate of 9600, PCLK1 at 16 MHz
+	 * TX/RX baud rate = f_clk/(16*USARTDIV)
+	 * 9600 = 16MHz/(16*USARTDIV) --->>> USARTDIV = 104.1666667
+	 * IEEE754 floating-point --->>> mantissa = 104, fraction = 0.167*16 = 2.672 ≈ 3*/
+	USART1->BRR |= (3 << 0) | (104 << 4);
+
+	USART1->CR1 |= USART_CR1_RE; // RE: Receiver enable
+	USART1->CR1 |= USART_CR1_TE; // TE: Transmitter enable
+}
+
+void clearSSD(void){ // Clear display
+	GPIOB -> ODR |= (1U << 0); //PB0 -> A
+	GPIOB -> ODR |= (1U << 1); //PB1 -> B
+	GPIOB -> ODR |= (1U << 2); //PB2 -> C
+	GPIOB -> ODR |= (1U << 3); //PB3 -> D
+	GPIOB -> ODR |= (1U << 4); //PB4 -> E
+	GPIOB -> ODR |= (1U << 5); //PB5 -> F
+	GPIOB -> ODR |= (1U << 6); //PB6 -> G
+}
+
+void setSSD(int x){ // choose number we want and its leds are turned on.
+	clearSSD();
+	switch(x){
+		case 0:
+			GPIOB->ODR &= ~(0x3F); // A,B,C,D,E,F is on
+			break;
+		case 1:
+			GPIOB->ODR &= ~(0x6); // B,C is on
+			break;
+		case 2:
+			GPIOB->ODR &= ~(0x5B); // A,B,D,E,G is on
+			break;
+		case 3:
+			GPIOB->ODR &= ~(0x4F); // A,B,C,D,G is on
+			break;
+		case 4:
+			GPIOB->ODR &= ~(0x66); // B,C,F,G is on
+			break;
+		case 5:
+			GPIOB->ODR &= ~(0x6D); // A,C,D,F,G is on
+			break;
+		case 6:
+			GPIOB->ODR &= ~(0x7D); // A,C,D,E,F,G is on
+			break;
+		case 7:
+			GPIOB->ODR &= ~(0x7); // A,B,C is on
+			break;
+		case 8:
+			GPIOB->ODR &= ~(0x7F); // A,B,C,D,E,F,G is on
+			break;
+		case 9:
+			GPIOB->ODR &= ~(0x6F); //A,B,C,D,F,G is on; E is off
+			break;
+	}
+}
+
+void SetZero(void){
+	GPIOA ->ODR |= (1U << 7); // D1 digit -> PA7
+	GPIOA ->ODR |= (1U << 6); // D2 digit -> PA6
+	GPIOA ->ODR |= (1U << 0); // D3 digit -> PA0
+	GPIOA ->ODR |= (1U << 5); // D4 digit -> PA5
+	setSSD(0);
+}
+void Delay(volatile uint32_t time){
+    for(; time>0; time--);
+}

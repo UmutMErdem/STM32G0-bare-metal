@@ -1,0 +1,220 @@
+/* author: Umut Mehmet ERDEM | Arda DERİCİ | Serdar BAŞYEMENİCİ
+* problem2.c
+*/
+
+#include "stm32g0xx.h"
+
+uint16_t pot_value; // Potantiometer data
+uint32_t led1_val; // Brightness value for LED1
+uint32_t led2_val; // Brightness value for LED2
+
+uint16_t ADC_Data(void);
+void GPIO_Config(void);
+void TIM2_Config(void);
+void TIM3_Config(void);
+void ADC_Config(void);
+void Delay(volatile uint32_t);
+
+void TIM3_IRQHandler(void){
+	TIM3->SR &=  ~(TIM_SR_CC1IF); // Clear capture compare interrupt 1 flag
+	TIM3->SR &= ~(TIM_SR_UIF); // Clear update status register
+}
+
+void TIM2_IRQHandler(void) {
+    // PWM Duty Cycle[%] = (CCRx/ARR)*100;
+	pot_value = ADC_Data();
+	led1_val = (16000*pot_value)/4095;
+	led2_val = 16000-led1_val;
+
+	TIM2->CCR1 =led1_val;
+	TIM3->CCR1 =led2_val;
+
+	TIM3->SR &=  ~(TIM_SR_CC1IF); // Clear capture compare interrupt 1 flag
+    TIM2->SR &= ~(TIM_SR_UIF); // Clear update status register
+}
+
+int main(void){
+
+	GPIO_Config();
+	TIM2_Config();
+	TIM3_Config();
+	ADC_Config();
+
+	while(1){
+
+	}
+	return 0;
+}
+
+uint16_t ADC_Data(void){
+	ADC1->CR |= ADC_CR_ADSTART; // ADC Start Conversion
+
+	/*This bit is set by hardware at the end of each conversion(EOC) of a channel
+	 * when a new data result is available in the ADC_DR register.
+	 * 0: Channel conversion not complete
+	 * 1: Channel conversion complete*/
+	if((ADC1->ISR>>2) & (ADC_ISR_EOC>>2)){
+		return ADC1->DR; // return ADC data value
+	}
+	return 0;
+}
+
+void printChar(uint8_t c){
+	while(!(USART2->ISR & USART_ISR_TXE_TXFNF)); // when messages are sent.
+	USART2->TDR = c; // Transmit data register is taken character to send a message.
+}
+
+int _print(int f, char *ptr, int len)
+{
+	/*in for loop, i of is increasing until equal to len
+	 * and meanwhile, chars of 2nd parameter of _print function is writen
+	 * into the printChar character by character increasing ptr of 2nd parameter
+	 * of _print function  */
+	for(volatile int i = f; i<len; i++){
+		printChar(*ptr);
+		ptr++;
+	}
+	return len; // return length
+}
+
+void print(char *s){
+	int length = 0; // to count length of character
+	/* i is pointer of string and length is increasing until i equals NULL character*/
+	for(char *i = s; *i != NULL; i++) length++;
+	_print(0, s, length);
+}
+
+void GPIO_Config(void){
+	// input-output A and B ports clock enable
+	RCC->IOPENR |= (RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN);
+
+	// select PA0 mode as Alternate Function
+	GPIOA->MODER &= ~(3U << 2*0);
+	GPIOA->MODER |= (2U << 2*0);
+
+	/* PA0 pin used for TIM2_CH1 are selected
+	 * with GPIOx_AFRL = AFRL_AFSELy(Alternate Function register -
+	 * Alternate function selection for port x pin y)
+	 * AF2 -->> TIM2_CH1*/
+	GPIOA->AFR[0] |= GPIO_AFRL_AFSEL0_1;
+
+	// select PB4 mode as Alternate Function
+	GPIOB->MODER &= ~(3U << 2*4);
+	GPIOB->MODER |=  (2<< 2*4) ;
+
+	/* PB4 pin used for TIM3_CH1 are selected
+	* AF1 -->> TIM3_CH1*/
+	GPIOB->AFR[0]  |= GPIO_AFRL_AFSEL4_0;
+
+	//PA1 is ADC
+	GPIOA->MODER |= (3 << 2*1);
+
+	/* modes of GPIOA PA2 and PA3 pins are selected as alternate function.
+	 * like that 0b1111_1010_1111;*/
+	GPIOA->MODER &= ~((3U << 2*2) | (3U << 2*3));
+	GPIOA->MODER |= (2U << 2*2) | (2U << 2*3);
+
+	/* PA2 and PA3 pins used for USART2_TX and USART2_RX are selected
+	 * with GPIOx_AFRL = AFRL_AFSELy(Alternate Function register -
+	 * Alternate function selection for port x pin y)
+	 * AF1 -->> USART2_RX, USART2_TX*/
+	GPIOA->AFR[0] |= GPIO_AFRL_AFSEL2_0;
+	GPIOA->AFR[0] |= GPIO_AFRL_AFSEL3_0;
+}
+
+void ADC_Config(void){
+	RCC->APBENR2 |= RCC_APBENR2_ADCEN; // ADC clock enable
+
+	ADC1->CR |=ADC_CR_ADVREGEN; //voltage regulator enable
+	Delay(500);
+
+	ADC1->CR |=ADC_CR_ADCAL; //calibration
+	while(((ADC1->CR>>31)==ADC_CR_ADCAL>>31)); // until calibration
+	/* 0: Calibration complete
+	 * 1: Write 1 to calibrate the ADC. Read at 1 means that a calibration is in progress.*/
+
+	ADC1->CR |= ADC_CR_ADEN; // ADC is enabled.
+	while (ADC1->ISR & ADC_ISR_ADRDY); // 1: ADC is ready to start conversion
+
+	ADC1->CHSELR |= ADC_CHSELR_CHSEL1; //chanel selection for PA1
+	ADC1->CFGR1 |= ADC_CFGR1_CONT; // contionous conversion
+
+	ADC1->SMPR |= (6UL<<0); // 79.5 ADC clock cycles for sampling time selection 1
+}
+
+void TIM2_Config(void){
+	RCC->APBENR1 |= RCC_APBENR1_TIM2EN; // Timer 2 clock enable
+
+	TIM2->CR1 = 0; // zero out the control register just in case
+	TIM2->CR1 |= TIM_CR1_ARPE; // Auto-reload preload enable
+
+	TIM2->CCMR1 |= (6U << 4); // PWM mode 1 is selected.
+	TIM2->CCMR1 |= TIM_CCMR1_OC1PE; // Output Compare 1 Preload Enable
+
+	TIM2->CCER |= TIM_CCER_CC1E; // Capture compare ch1 enable
+
+	TIM2->CNT = 0; // zero out counter
+
+	// tim uptade frequency = TIM_CLK/((TIM_PSC+1)*TIM_ARR) for 1 s interrupt
+	TIM2->PSC = 9; // prescaler
+	TIM2->ARR = 16000; // period
+
+	TIM2->CCR1 = 0; // zero out duty for ch1 in TIM capture/compare register 1
+
+	// Update Generation: Re-initialize the counter and generates an update of the registers.
+	TIM2->EGR |= TIM_EGR_UG;
+
+	TIM2->DIER |= TIM_DIER_UIE; // Update interrupt enable
+
+	TIM2->CR1 |= TIM_CR1_CEN; // TIM2 Counter enable
+
+	NVIC_SetPriority(TIM2_IRQn, 1); // Setting Priority for timer handler
+	NVIC_EnableIRQ(TIM2_IRQn); // timer handler enable
+}
+
+void TIM3_Config(void){
+	RCC->APBENR1 |=	RCC_APBENR1_TIM3EN; // Timer 3 clock enable
+
+	TIM3->CR1=0; // zero out the control register just in case
+	TIM3->CR1 |= TIM_CR1_ARPE; // Auto-reload preload enable
+
+	TIM3->CCMR1 |= (6U << 4); // PWM mode 1 is selected. -->> 0110: PWM Mode
+	TIM3->CCMR1 |= TIM_CCMR1_OC1PE; // Output Compare 1 Preload Enable
+
+	TIM3->CCER |= TIM_CCER_CC1E; // Capture compare ch1 enable
+
+	TIM3->CNT =0; // zero out counter
+
+	// tim uptade frequency = TIM_CLK/((TIM_PSC+1)*TIM_ARR) for 1s interrupt
+	TIM3->PSC= 9;
+	TIM3->ARR= 16000;
+
+	// Update Generation: Re-initialize the counter and generates an update of the registers.
+	TIM3->EGR |= TIM_EGR_UG;
+
+	TIM3->DIER |= TIM_DIER_UIE; // Update interrupt enable
+
+	TIM3->CR1 |= TIM_CR1_CEN; // TIM3 Counter enable
+
+	NVIC_SetPriority(TIM3_IRQn, 1);
+	NVIC_EnableIRQ(TIM3_IRQn);
+}
+
+void USART2_Config(void){
+	RCC->APBENR1 |= RCC_APBENR1_USART2EN; // RCC APB peripherals clock enable for USART2
+	USART2->CR1 = 0x00; // clear all
+	USART2->CR1 |= USART_CR1_UE; // UE: USART enable
+
+	/* Baud rate of 9600, PCLK1 at 16 MHz
+	 * TX/RX baud rate = f_clk/(16*USARTDIV)
+	 * 9600 = 16MHz/(16*USARTDIV) --->>> USARTDIV = 104.1666667
+	 * IEEE754 floating-point --->>> mantissa = 104, fraction = 0.167*16 = 2.672 ≈ 3*/
+	USART2->BRR |= (3 << 0) | (104 << 4);
+
+	USART2->CR1 |= USART_CR1_RE; // RE: Receiver enable
+	USART2->CR1 |= USART_CR1_TE; // TE: Transmitter enable
+}
+
+void Delay(volatile uint32_t time){
+    for(; time>0; time--);
+}

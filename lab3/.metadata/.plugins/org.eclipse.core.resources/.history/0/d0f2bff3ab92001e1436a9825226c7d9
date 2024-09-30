@@ -1,0 +1,217 @@
+#include "stm32g0xx.h"
+
+void clearSSD(void);
+void print_zero(void);
+void delay(uint32_t);
+void setSSD(int x);
+void counter(void);
+void button_init(void);
+void InitTimer(void);
+void GPIOA_Init(void);
+void GPIOB_Init(void);
+
+uint8_t flag = 0;
+
+void TIM3_IRQHandler(){
+	TIM3->SR &= ~(1U << 0);
+	counter();
+}
+
+void EXTI0_1_IRQHandler(){
+	flag = 1;
+	EXTI->RPR1 |= (1U << 1); // rising edge
+}
+
+int main(void) {
+	GPIOA_Init();
+	GPIOB_Init();
+	print_zero();
+	button_init();
+
+	while(1) {
+	}
+
+	return 0;
+}
+
+void clearSSD(void){
+	GPIOB -> ODR |= (1U << 0); //PB0 A
+	GPIOB -> ODR |= (1U << 1); //PB1 B
+	GPIOB -> ODR |= (1U << 2); //PB2 C
+	GPIOB -> ODR |= (1U << 3); //PB3 D
+	GPIOB -> ODR |= (1U << 4); //PB4 E
+	GPIOB -> ODR |= (1U << 5); //PB5 F
+	GPIOB -> ODR |= (1U << 6); //PB6 G
+}
+
+void setSSD(int x){
+	clearSSD();
+	switch(x){
+		case 0:
+			for(int i=0; i<6; i++){// A B C D E F
+				GPIOB->ODR &= ~(1U << i);
+			}
+			break;
+		case 1:
+			for(int i=1; i<3; i++){ //B C
+				GPIOB->ODR &= ~(1U << i);
+				}
+			break;
+		case 2:
+			for(int i=0; i<7; i++){// A B D E G
+				if (i==0 || i==1 || i==3 || i==4 || i==6){
+					GPIOB->ODR &= ~(1U << i);
+				}
+			}
+			break;
+		case 3:
+			for(int i=0; i<7; i++){// A B C D G
+				if (i==0 || i==1 || i==2 || i==3 || i==6){
+					GPIOB->ODR &= ~(1U << i);
+				}
+			}
+			break;
+		case 4:
+			for(int i=0; i<7; i++){// B C F G
+				if (i==1 || i==2 || i==5 || i==6){
+					GPIOB->ODR &= ~(1U << i);
+				}
+			}
+			break;
+		case 5:
+			for(int i=0; i<7; i++){// A C D F G
+				if (i==0 || i==2 || i==3 || i==5 || i==6){
+					GPIOB->ODR &= ~(1U << i);
+				}
+			}
+			break;
+		case 6:
+			GPIOB->ODR &= ~(1U << 0);// A C D E F G
+			for(int i=2; i<7; i++){
+				GPIOB->ODR &= ~(1U << i);
+			}
+			break;
+		case 7:
+			for(int i=0; i<3; i++){// A B C
+				GPIOB->ODR &= ~(1U << i);
+			}
+			break;
+		case 8:
+			for(int i=0; i<7; i++){// A B C D E F G
+				GPIOB->ODR &= ~(1U << i);
+			}
+			break;
+		case 9:
+			GPIOB->ODR &= ~(1U << 0); //A
+			GPIOB->ODR &= ~(1U << 1); //B
+			GPIOB->ODR &= ~(1U << 2); //C
+			GPIOB->ODR &= ~(1U << 3); //D
+			GPIOB->ODR &= ~(1U << 5); //F
+			GPIOB->ODR &= ~(1U << 6); //G
+			break;
+	}
+}
+void counter(void){
+	print_zero();
+	delay(1000000);
+	for(int i=0; i<=9999; i++){//second counter
+		int thousand, hundred, decimal, unit;
+		thousand=(i/1000);
+		hundred=((i-thousand*1000)/100);
+		decimal=((i- thousand*1000 - hundred*100)/10);
+		unit=(i- thousand*1000 - hundred*100 - decimal*10);
+
+		GPIOA ->ODR &= ~(1U << 7); // D1 - PA7
+		GPIOA ->ODR &= ~(1U << 6); // D2 - PA7
+		GPIOA ->ODR &= ~(1U << 0); // D3 - PA7
+		GPIOA ->ODR |= (1U << 5);
+		setSSD(unit);
+		delay(50000);
+
+		GPIOA ->ODR &= ~(1U << 7); // D1 - PA7
+		GPIOA ->ODR &= ~(1U << 6); // D2 - PA7
+		GPIOA ->ODR |= (1U << 0); // D3 - PA7
+		GPIOA ->ODR &= ~(1U << 5);
+		setSSD(decimal);
+		delay(50000);
+
+		GPIOA ->ODR &= ~(1U << 7); // D1 - PA7
+		GPIOA ->ODR |= (1U << 6); // D2 - PA7
+		GPIOA ->ODR &= ~(1U << 0); // D3 - PA7
+		GPIOA ->ODR &= ~(1U << 5);
+		setSSD(hundred);
+		delay(50000);
+
+		GPIOA ->ODR |= (1U << 7); // D1 - PA7
+		GPIOA ->ODR &= ~(1U << 6); // D2 - PA7
+		GPIOA ->ODR &= ~(1U << 0); // D3 - PA7
+		GPIOA ->ODR &= ~(1U << 5);
+		setSSD(thousand);
+		delay(50000);
+	}
+	GPIOB->ODR |= (1U << 8); // PB8 - D8 LED turn on
+	delay(1000000);
+	GPIOB->BRR |= (1U << 8); // led turn off
+	print_zero();
+	delay(1000000);
+}
+void button_init(void){//PA1 İS BUTTON
+	/* rising edge, selection register and mask register */
+	EXTI->RTSR1 |= (1U << 1);
+	EXTI->EXTICR[0] |= (0U << 8*1);
+	EXTI->IMR1 |= (1U << 1);
+	/* enable NVIC and set interrupt priority */
+	NVIC_SetPriority(EXTI0_1_IRQn, 0);
+	NVIC_EnableIRQ(EXTI0_1_IRQn);
+}
+
+void GPIOA_Init(void){
+	RCC->IOPENR |= (1U << 0);
+	for(int k=0; k<9; k++){
+		if (k==0 || k==1 || k==5 || k==6 || k==7 || k==8){
+			GPIOA->MODER &= ~(3U << 2*k);
+			GPIOA->MODER |= (1U << 2*k);
+		}
+	}
+}
+
+void GPIOB_Init(void){
+	RCC->IOPENR |= (1U << 1);
+	for(int k=0; k<9; k++){
+		if (k==0 || k==1 || k==2 || k==3 || k==4 || k==5 || k==6 || k==8){
+			GPIOB->MODER &= ~(3U << 2*k);
+			GPIOB->MODER |= (1U << 2*k);
+		}
+	}
+}
+
+void print_zero(void){
+	/**/
+	GPIOA ->ODR |= (1U << 7); // D1 digit to PA7
+	GPIOA ->ODR |= (1U << 6); // D2 digit to PA6
+	GPIOA ->ODR |= (1U << 0); // D3 digit to PA0
+	GPIOA ->ODR |= (1U << 5); // D4 digit to PA5
+	setSSD(0);
+}
+
+void InitTimer(void){
+
+	RCC->APBENR1 |= (1U<<1);
+
+	TIM3->CR1 = 0;
+	TIM3->CR1 |= (1<<7);
+	TIM3->CNT = 0;
+
+	TIM3->PSC = 160000;
+	TIM3->ARR = 9999;
+
+	TIM3->DIER |= (1<<0);
+	TIM3->CR1 |= (1<<0);
+
+	NVIC_SetPriority(TIM3_IRQn,0);
+	NVIC_EnableIRQ(TIM3_IRQn);
+}
+
+void delay(uint32_t time) {
+	for(; time>0; time--);
+}

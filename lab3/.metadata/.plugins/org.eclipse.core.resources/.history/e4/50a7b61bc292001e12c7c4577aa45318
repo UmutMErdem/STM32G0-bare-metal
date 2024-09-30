@@ -1,0 +1,29 @@
+#include "stm32g0xx.h"
+
+void IWDG_Handler(void){
+	IWDG->SR = 0x7;
+}
+
+int main(void) {
+
+	/* PC6 output set
+	 * turned on the LED before initializing the watchdog.
+	 * This will provide a blinking effect, if the system resets and the execution starts from the beginning.
+	*/
+	RCC->IOPENR = RCC_IOPENR_GPIOCEN;
+	GPIOC->MODER &= ~(1U << 2*6);
+	GPIOC->MODER |= (1U << 2*6);
+	GPIOC->ODR |= (1U << 6);
+
+	IWDG->KR = 0x5555;
+	IWDG->PR = 0x5; // For time interval 0.5-2048 ms
+	IWDG->RLR = 0xFFF; // For aranging time as 2048ms
+	IWDG->WINR = 0xFFF;
+	IWDG->KR = 0xCCCC;
+
+	while(1) {
+		WatchdogFunction();
+	}
+
+	return 0;
+}

@@ -1,0 +1,23 @@
+00:22:25 **** Incremental Build of configuration Debug for project problem3 ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m0plus -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32G031xx -c -I../Core/Inc -I../Drivers/STM32G0xx_HAL_Driver/Inc -I../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32G0xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "problem3.elf" @"objects.list"   -mcpu=cortex-m0plus -T"D:\EE3.1\ELM335_WS\lab3\problem3\STM32G031K8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="problem3.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: problem3.elf
+ 
+arm-none-eabi-size   problem3.elf 
+arm-none-eabi-objdump -h -S  problem3.elf  > "problem3.list"
+arm-none-eabi-objcopy  -O ihex  problem3.elf  "problem3.hex"
+arm-none-eabi-objcopy  -O binary  problem3.elf  "problem3.bin"
+   text	   data	    bss	    dec	    hex	filename
+   2576	      8	   1576	   4160	   1040	problem3.elf
+Finished building: default.size.stdout
+ 
+Finished building: problem3.list
+Finished building: problem3.hex
+Finished building: problem3.bin
+ 
+ 
+ 
+
+00:22:26 Build Finished. 0 errors, 0 warnings. (took 1s.95ms)
+

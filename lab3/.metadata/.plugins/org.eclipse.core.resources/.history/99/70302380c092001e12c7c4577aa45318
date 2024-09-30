@@ -1,0 +1,20 @@
+#include "stm32g0xx.h"
+
+void IWDG_Handler(void){
+	IWDG->SR = 0x7;
+}
+
+int main(void) {
+
+	IWDG->KR = 0x5555;
+	IWDG->PR = 0x5; // For time interval 0.5-2048 ms
+	IWDG->RLR = 0xFFF; // For aranging time as 2048ms
+	IWDG->WINR = 0xFFF;
+	IWDG->KR = 0xCCCC;
+
+	while(1) {
+		WatchdogFunction();
+	}
+
+	return 0;
+}
